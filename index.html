@@ -2,7 +2,12 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>데이지 - 전국 한중 연동 시스템</title>
+
+<!-- Pretendard (선택) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
 <style>
@@ -20,7 +25,7 @@
     justify-content:flex-start;
     align-items:center;
     height:100vh;
-    font-family:'Pretendard', sans-serif;
+    font-family:'Pretendard', system-ui, sans-serif;
     overflow:hidden;
   }
 
@@ -193,7 +198,7 @@ const regionData = {
 
   "경기도": { cn:"京畿道", sigungu:{
     "수원시":"水原市","성남시":"城南市","의정부시":"议政府市","안양시":"安养市","부천시":"富川市",
-    "광명시":"光明市","평택시":"平泽市","동두천시":"东豆川市", /* ✅ 오타 수정 */
+    "광명시":"光明市","평택시":"平泽市","동두천시":"东豆川市",
     "안산시":"安山市","고양시":"高阳市","과천시":"果川市","구리시":"九里市","남양주시":"南杨州市",
     "오산시":"乌山市","시흥시":"始兴市","군포시":"军浦市","의왕시":"义王市","하남시":"河南市",
     "용인시":"龙仁市","파주시":"坡州市","이천시":"利川市","안성시":"安城市","김포시":"金浦市",
@@ -237,11 +242,20 @@ function init(){
     sidoKo.innerHTML += `<option value="${ko}">${ko}</option>`;
     sidoCn.innerHTML += `<option value="${ko}">${regionData[ko].cn}</option>`;
   });
+
+  sigunguKo.innerHTML = `<option value="">시군구 선택</option>`;
+  sigunguCn.innerHTML = `<option value="">选择 市郡区</option>`;
+}
+
+function resetSigungu(){
+  sigunguKo.innerHTML = `<option value="">시군구 선택</option>`;
+  sigunguCn.innerHTML = `<option value="">选择 市郡区</option>`;
+  sigunguKo.value = "";
+  sigunguCn.value = "";
 }
 
 function updateSigunguList(val){
-  sigunguKo.innerHTML = `<option value="">시군구 선택</option>`;
-  sigunguCn.innerHTML = `<option value="">选择 市郡区</option>`;
+  resetSigungu();
   if(val && regionData[val]){
     const list = regionData[val].sigungu;
     Object.keys(list).forEach(ko=>{
@@ -256,19 +270,22 @@ sidoKo.onchange = (e)=>{
   const val = e.target.value;
   sidoCn.value = val;
   updateSigunguList(val);
-  regionDisplay.textContent = val || "지역을 선택해 주세요";
+
+  regionDisplay.textContent = val ? val : "지역을 선택해 주세요";
 };
 
 sidoCn.onchange = (e)=>{
   const val = e.target.value;
   sidoKo.value = val;
   updateSigunguList(val);
-  regionDisplay.textContent = val || "지역을 선택해 주세요";
+
+  regionDisplay.textContent = val ? val : "지역을 선택해 주세요";
 };
 
 sigunguKo.onchange = async(e)=>{
   const val = e.target.value;
   sigunguCn.value = val;
+
   if(val){
     regionDisplay.textContent = `${sidoKo.value} ${val}`;
     await copyToClipboard();
@@ -278,6 +295,12 @@ sigunguKo.onchange = async(e)=>{
 sigunguCn.onchange = async(e)=>{
   const val = e.target.value;
   sigunguKo.value = val;
+
+  // ✅ 혹시 sido가 비어있으면(중국어 먼저 조작) 강제 세팅
+  if(!sidoKo.value && sidoCn.value){
+    sidoKo.value = sidoCn.value;
+  }
+
   if(val){
     regionDisplay.textContent = `${sidoKo.value} ${val}`;
     await copyToClipboard();
@@ -299,23 +322,42 @@ function showStatus(ok, text){
   setTimeout(()=>statusMsg.classList.remove('success','fail'), 2000);
 }
 
-/* ✅ 캡처 & 클립보드 복사 (화질업: scale 2) */
+/* ✅ 캡처 & 클립보드 복사 */
 async function copyToClipboard(){
   const content = document.getElementById('content');
+
   try{
-    const canvas = await html2canvas(content, { scale: 2, useCORS: true });
+    const scale = 2; // ✅ 선명도
+    const canvas = await html2canvas(content, {
+      scale,
+      useCORS: true,
+      allowTaint: false,
+      backgroundColor: null
+    });
+
     canvas.toBlob(async(blob)=>{
+      if(!blob){
+        showStatus(false, "❌ 캡처 실패(toBlob null)");
+        return;
+      }
+
+      // ClipboardItem 지원 체크
+      if(typeof ClipboardItem === "undefined"){
+        showStatus(false, "❌ 이 브라우저는 이미지 복사를 지원 안함");
+        return;
+      }
+
       try{
         const item = new ClipboardItem({ "image/png": blob });
         await navigator.clipboard.write([item]);
         showStatus(true, "✅ 이미지 복사 완료!");
       }catch(e){
-        showStatus(false, "❌ 복사 실패(브라우저 권한) — 버튼으로 다시 시도!");
+        showStatus(false, "❌ 복사 실패(권한/HTTPS 필요) — 버튼으로 다시!");
       }
-    });
+    }, "image/png");
   }catch(err){
     console.error(err);
-    showStatus(false, "❌ 캡처 실패");
+    showStatus(false, "❌ 캡처 실패(html2canvas 에러)");
   }
 }
 
